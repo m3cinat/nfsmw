@@ -1,0 +1,486 @@
+#include "Speed/Indep/Src/Camera/Camera.hpp"
+#include "Speed/Indep/Src/Camera/CameraMover.hpp"
+
+
+// NOISE 
+// TODO: rename variables, delete ghidra pseudocods
+
+float NoiseBase(int x)
+
+{
+  unsigned int uVar1;
+  
+  uVar1 = x << 0xd ^ x;
+  return 1.0 - (float)(int)(uVar1 * (uVar1 * uVar1 * 0x3d73 + 0xc0ae5) + 0x5208dd0d & 0x7fffffff) *
+               9.313226e-10;
+}
+
+
+float NoiseInterpolated(float x)
+
+{
+  int x_00;
+  float fVar1;
+  float fVar2;
+  
+  fVar1 = (float)(int)x;
+  if (x < fVar1) {
+    fVar1 = fVar1 - 1.0;
+  }
+  x_00 = (int)fVar1;
+  fVar1 = NoiseBase(x_00);
+  fVar2 = NoiseBase(x_00 + 1);
+  return (x - (float)x_00) * fVar2 + (1.0 - (x - (float)x_00)) * fVar1;
+}
+
+float Noise(float x)
+
+{
+  float fVar1;
+  float fVar2;
+  float fVar3;
+  int i;
+  float fVar4;
+  
+  fVar1 = 1.0;
+  fVar2 = 0.0;
+  i = 0;
+  fVar3 = fVar1;
+  do {
+    i = i + 1;
+    fVar4 = NoiseInterpolated(x * fVar1);
+    fVar1 = fVar1 + fVar1;
+    fVar2 = fVar3 * fVar4 + fVar2;
+    fVar3 = fVar3 * 0.5;
+  } while (i < 6);
+  return fVar2;
+}
+
+/////////////////
+
+Camera TheCamera;
+// CameraMover CamMover;
+
+static int g_DisableCommunication = 0;
+
+unsigned short aBaselineFovNoise = 0x2aaa;
+
+static CameraLink g_CameraLink;
+
+Camera::Camera() {
+    int RealTime;
+    // bMatrix4 m; // 0x4
+    bMatrix4 defaultMatrix; // 0x68
+
+
+    RealTime = RealTimeFrames;
+    LastUpdateTime = -0x80000000;
+    LastDisparateTime = RealTime;
+    RenderDash = 0;
+
+    defaultMatrix.v2.z = -1.0;
+    defaultMatrix.v3.z = 1200.0;
+    defaultMatrix.v2.w = 100.0;
+
+    CurrentKey.TargetDistance = 10.0;
+    CurrentKey.NearZ = 0.5;
+    bClearVelocity = false;
+
+
+    // Camera::StopUpdating = false;
+    // JR2ServerExists = 0;
+    // ElapsedTime = 0.0f;
+    // LastUpdateTime = 0;
+    // LastDisparateTime = 0;
+
+    
+    defaultMatrix.v1.x = 0.0;
+    defaultMatrix.v2.x = 0.0;
+    defaultMatrix.v3.x = 0.0;
+    defaultMatrix.v0.y = 0.0;
+    defaultMatrix.v1.y = -1.0;
+    defaultMatrix.v2.y = 0.0;
+    defaultMatrix.v3.y = 0.0;
+
+
+    defaultMatrix.v0.z = 0.0;
+    defaultMatrix.v1.z = 0.0;
+    defaultMatrix.v0.w = 0.0;
+    defaultMatrix.v1.w = 0.0;
+
+    CurrentKey.FocalDistance = 0.0;
+    CurrentKey.DepthOfField = 0.0;
+    ElapsedTime = 1.0;
+
+    defaultMatrix.v0.x = 1.0;
+    defaultMatrix.v3.w = 1.0;
+
+    CurrentKey.FarZ = 10000.0;
+    CurrentKey.FieldOfView = 0x36fb;
+
+
+    CurrentKey.NoiseAmplitude2.w = 0.0f;
+    CurrentKey.SimTimeMultiplier = 1.0;
+    CurrentKey.LB_height = 0.0;
+    CurrentKey.NoiseFrequency1.x = 1.0;
+    CurrentKey.NoiseAmplitude1.x = 0.0;
+    CurrentKey.NoiseAmplitude1.y = 0.0;
+    CurrentKey.NoiseAmplitude1.z = 0.0;
+    CurrentKey.NoiseAmplitude1.w = 0.0;
+
+    
+    
+    CurrentKey.NoiseFrequency1.y = 1.0;
+    CurrentKey.NoiseFrequency1.z = 1.0;
+    CurrentKey.NoiseFrequency1.w = 1.0;
+    CurrentKey.NoiseFrequency2.x = 1.0;
+    CurrentKey.NoiseFrequency2.y = 1.0;
+    CurrentKey.NoiseFrequency2.z = 1.0;
+    CurrentKey.NoiseFrequency2.w = 1.0;
+
+
+
+    CurrentKey.NoiseAmplitude2.x = 0.0;
+    CurrentKey.NoiseAmplitude2.y = 0.0;
+    CurrentKey.NoiseAmplitude2.z = 0.0;
+
+
+
+    SetCameraMatrix(&defaultMatrix, 1.0);
+    SetCameraMatrix(&defaultMatrix, 1.0);
+}
+
+
+void Camera::SetCameraMatrix(bMatrix4 *m, float fTime) {
+    bMatrix4 bStack_a8;
+
+    if (Camera::StopUpdating == 0) {
+        bMemCpy(&this->PreviousKey, this, 0xd4);
+        this->ElapsedTime = fTime;
+
+        if (Camera::JollyRancherResponse.UseMatrix == 0 || DisableCommunication != 0) {
+            if (cameralink.field_3469 != 0) {
+                cameralink.field_3469 = 0;
+            }
+            PSMTX44Copy((const float (*)[4])m, (float (*)[4])this);
+        } else {
+            if (cameralink.field_3469 == 0) {
+                cameralink.field_3469 = 1;
+            }
+            bMemCpy(&bStack_a8, &Camera::JollyRancherResponse.CamMatrix, 0x40);
+            bStack_a8.v3.x *= 0.01f;
+            bStack_a8.v3.y *= 0.01f;
+            bStack_a8.v3.z *= 0.01f;
+            bStack_a8.v3.w = 1.0f;
+            PSMTX44Copy((const float (*)[4]) & bStack_a8, (float (*)[4])this);
+        }
+
+        bTransposeMatrix(&bStack_a8, (bMatrix4 *)this);
+
+        bStack_a8.v0.w = 0.0f;
+        bStack_a8.v1.w = 0.0f;
+        bStack_a8.v2.w = 0.0f;
+        eMulVector(&CurrentKey.Position, &bStack_a8, (bVector3 *)&CurrentKey.Matrix.v3);
+
+        CurrentKey.Position.x = -CurrentKey.Position.x;
+        CurrentKey.Position.y = -CurrentKey.Position.y;
+        CurrentKey.Position.z = -CurrentKey.Position.z;
+
+        bNormalize(&CurrentKey.Direction, (bVector3 *)&bStack_a8.v2);
+
+        float targetDist = CurrentKey.TargetDistance;
+        CurrentKey.Target.x = CurrentKey.Direction.x * targetDist + CurrentKey.Position.x;
+        CurrentKey.Target.y = CurrentKey.Direction.y * targetDist + CurrentKey.Position.y;
+        CurrentKey.Target.z = CurrentKey.Direction.z * targetDist + CurrentKey.Position.z;
+
+        if (this->bClearVelocity) {
+            this->bClearVelocity = false;
+            bMemCpy(&this->PreviousKey, this, 0xd4);
+            this->ElapsedTime = 1.0f;
+        }
+
+        if (0.0 < (double)this->ElapsedTime) {
+            float invTime = 1.0f / this->ElapsedTime;
+
+            (this->VelocityKey).Position.x = (CurrentKey.Position.x - (this->PreviousKey).Position.x) * invTime;
+            (this->VelocityKey).Position.y = (CurrentKey.Position.y - (this->PreviousKey).Position.y) * invTime;
+            (this->VelocityKey).Position.z = (CurrentKey.Position.z - (this->PreviousKey).Position.z) * invTime;
+
+            (this->VelocityKey).Direction.x = (CurrentKey.Direction.x - (this->PreviousKey).Direction.x) * invTime;
+            (this->VelocityKey).Direction.y = (CurrentKey.Direction.y - (this->PreviousKey).Direction.y) * invTime;
+            (this->VelocityKey).Direction.z = (CurrentKey.Direction.z - (this->PreviousKey).Direction.z) * invTime;
+
+            (this->VelocityKey).Target.x = (CurrentKey.Target.x - (this->PreviousKey).Target.x) * invTime;
+            (this->VelocityKey).Target.y = (CurrentKey.Target.y - (this->PreviousKey).Target.y) * invTime;
+            (this->VelocityKey).Target.z = (CurrentKey.Target.z - (this->PreviousKey).Target.z) * invTime;
+
+            (this->VelocityKey).TargetDistance = (CurrentKey.TargetDistance - (this->PreviousKey).TargetDistance) * invTime;
+            (this->VelocityKey).FocalDistance = (CurrentKey.FocalDistance - (this->PreviousKey).FocalDistance) * invTime;
+            (this->VelocityKey).DepthOfField = (CurrentKey.DepthOfField - (this->PreviousKey).DepthOfField) * invTime;
+            (this->VelocityKey).NearZ = (CurrentKey.NearZ - (this->PreviousKey).NearZ) * invTime;
+            (this->VelocityKey).FarZ = (CurrentKey.FarZ - (this->PreviousKey).FarZ) * invTime;
+            (this->VelocityKey).LB_height = (CurrentKey.LB_height - (this->PreviousKey).LB_height) * invTime;
+            (this->VelocityKey).SimTimeMultiplier = (CurrentKey.SimTimeMultiplier - (this->PreviousKey).SimTimeMultiplier) * invTime;
+
+            (this->VelocityKey).FieldOfView =
+                (unsigned short)(int)(invTime * (float)((short)(CurrentKey.FieldOfView - (this->PreviousKey).FieldOfView)));
+
+            (this->VelocityKey).NoiseFrequency1.x = (CurrentKey.NoiseFrequency1.x - (this->PreviousKey).NoiseFrequency1.x) * invTime;
+            (this->VelocityKey).NoiseFrequency1.y = (CurrentKey.NoiseFrequency1.y - (this->PreviousKey).NoiseFrequency1.y) * invTime;
+            (this->VelocityKey).NoiseFrequency1.z = (CurrentKey.NoiseFrequency1.z - (this->PreviousKey).NoiseFrequency1.z) * invTime;
+            (this->VelocityKey).NoiseFrequency1.w = (CurrentKey.NoiseFrequency1.w - (this->PreviousKey).NoiseFrequency1.w) * invTime;
+
+            (this->VelocityKey).NoiseFrequency2.x = (CurrentKey.NoiseFrequency2.x - (this->PreviousKey).NoiseFrequency2.x) * invTime;
+            (this->VelocityKey).NoiseFrequency2.y = (CurrentKey.NoiseFrequency2.y - (this->PreviousKey).NoiseFrequency2.y) * invTime;
+            (this->VelocityKey).NoiseFrequency2.z = (CurrentKey.NoiseFrequency2.z - (this->PreviousKey).NoiseFrequency2.z) * invTime;
+            (this->VelocityKey).NoiseFrequency2.w = (CurrentKey.NoiseFrequency2.w - (this->PreviousKey).NoiseFrequency2.w) * invTime;
+
+            (this->VelocityKey).NoiseAmplitude1.x = (CurrentKey.NoiseAmplitude1.x - (this->PreviousKey).NoiseAmplitude1.x) * invTime;
+            (this->VelocityKey).NoiseAmplitude1.y = (CurrentKey.NoiseAmplitude1.y - (this->PreviousKey).NoiseAmplitude1.y) * invTime;
+            (this->VelocityKey).NoiseAmplitude1.z = (CurrentKey.NoiseAmplitude1.z - (this->PreviousKey).NoiseAmplitude1.z) * invTime;
+            (this->VelocityKey).NoiseAmplitude1.w = (CurrentKey.NoiseAmplitude1.w - (this->PreviousKey).NoiseAmplitude1.w) * invTime;
+
+            (this->VelocityKey).NoiseAmplitude2.x = (CurrentKey.NoiseAmplitude2.x - (this->PreviousKey).NoiseAmplitude2.x) * invTime;
+            (this->VelocityKey).NoiseAmplitude2.y = (CurrentKey.NoiseAmplitude2.y - (this->PreviousKey).NoiseAmplitude2.y) * invTime;
+            (this->VelocityKey).NoiseAmplitude2.z = (CurrentKey.NoiseAmplitude2.z - (this->PreviousKey).NoiseAmplitude2.z) * invTime;
+            (this->VelocityKey).NoiseAmplitude2.w = (CurrentKey.NoiseAmplitude2.w - (this->PreviousKey).NoiseAmplitude2.w) * invTime;
+        }
+    }
+}
+
+void Camera::CommunicateWithJollyRancher(char *cameraname) {
+
+    char data[0x60];
+    Mtx44 scaledmatrix;
+
+    JollyRancherResponsePacket *local_10;
+    int local_c;
+
+    if (DisableCommunication == 0) {
+
+        local_10 = &Camera::JollyRancherResponse;
+        local_c = DisableCommunication;
+
+        bMemCpy(data, &local_10, 4);
+        bMemCpy(data + 4, &local_c, 4);
+        {
+            PSMTX44Copy((const float (*)[4])this, (float (*)[4]) & scaledmatrix);
+        }
+        scaledmatrix[3][0] *= 100.0f;
+        scaledmatrix[3][1] *= 100.0f;
+        scaledmatrix[3][2] *= 100.0f;
+        scaledmatrix[3][3] = 1.0f;
+        {
+            bMemCpy(data + 8, (void *)(&scaledmatrix), 0x40);
+        }
+        bStrCpy(data + 0x48, cameraname);
+        bFunkCallASync("JR2Server", 1, data, 0x60);
+    }
+    return;
+}
+
+unsigned short Camera::FovRelativeAngle(unsigned short a) {
+    float sin_a = bSin(a);
+    float sin_fov = bSin((unsigned short)(this->CurrentKey.FieldOfView >> 1));
+    float sin_baseline = bSin((unsigned short)(aBaselineFovNoise >> 1));
+
+    return bASin((float)(sin_a * sin_fov) / sin_baseline);
+}
+
+void Camera::UpdateAll(float dT){
+    UpdateCameraMovers(dT);
+    //UpdateCameraShakers((float)dT); //TODO
+}
+
+//TODO: rename variables, delete ghidra pseudocods
+//TODO2: magic nubers is who?
+void Camera::ApplyNoise(bMatrix4 *p_matrix,float time,float intensity){
+  int iVar1;
+  float fVar2;
+  float fVar3;
+  float fVar4;
+  float fVar5;
+  float fVar6;
+  float fVar7;
+  float fVar8;
+  float fVar9;
+  unsigned short uVar10;
+  float fVar11;
+  float fVar12;
+  float fVar13;
+  float fVar14;
+  float fVar15;
+  float fVar16;
+  float fVar17;
+  float fVar18;
+  bVector4 v;
+  bVector4 v1;
+  bVector4 v2;
+  bVector4 v_noise;
+  bMatrix4 m;
+  bMatrix4 bStack_88;
+  long long local_48;
+  
+  fVar2 = CurrentKey.NoiseFrequency1.y;
+  fVar3 = CurrentKey.NoiseFrequency1.z;
+  fVar4 = CurrentKey.NoiseFrequency1.w;
+  fVar11 = Noise(CurrentKey.NoiseFrequency1.x * time);
+  fVar12 = Noise(fVar2 * time);
+  fVar13 = Noise(fVar3 * time);
+  fVar14 = Noise(fVar4 * time);
+  fVar2 = CurrentKey.NoiseAmplitude1.x;
+  fVar3 = CurrentKey.NoiseAmplitude1.y;
+  fVar4 = CurrentKey.NoiseAmplitude1.z;
+  fVar5 = CurrentKey.NoiseAmplitude1.w;
+  fVar6 = CurrentKey.NoiseFrequency2.y;
+  fVar7 = CurrentKey.NoiseFrequency2.z;
+  fVar8 = CurrentKey.NoiseFrequency2.w;
+  fVar15 = Noise(CurrentKey.NoiseFrequency2.x * time);
+  fVar16 = Noise(fVar6 * time);
+  fVar17 = Noise(fVar7 * time);
+  fVar18 = Noise(fVar8 * time);
+  fVar6 = CurrentKey.NoiseAmplitude2.x;
+  fVar7 = CurrentKey.NoiseAmplitude2.y;
+  fVar8 = CurrentKey.NoiseAmplitude2.z;
+  fVar9 = CurrentKey.NoiseAmplitude2.w;
+  PSMTX44Identity( (float (*)[4])&bStack_88);
+  iVar1 = (int)((fVar13 * fVar4 + fVar17 * fVar8) * intensity * 65536.0);
+  local_48 = (long long)iVar1;
+  bStack_88.v3.x = (fVar11 * fVar2 + fVar15 * fVar6) * intensity;
+  bStack_88.v3.y = (fVar12 * fVar3 + fVar16 * fVar7) * intensity;
+  uVar10 = Camera::FovRelativeAngle((unsigned short)(iVar1 / 0x168));
+  eRotateX(&bStack_88,&bStack_88,uVar10);
+  iVar1 = (int)((fVar14 * fVar5 + fVar18 * fVar9) * intensity * 65536.0);
+  local_48 = (long long)iVar1;
+  uVar10 = Camera::FovRelativeAngle((unsigned short)(iVar1 / 0x168));
+  eRotateY(&bStack_88,&bStack_88,uVar10);
+  eMulMatrix(p_matrix,p_matrix,&bStack_88);
+  return;
+}
+
+//TODO: rename variables, delete ghidra pseudocods
+void UpdateCameraMovers(float dT) {
+
+  bool bVar1;
+  int iVar2;
+  Vector3 *sl;
+  bNode *pbVar3;
+  Camera *pCVar4;
+  bNode *pbVar5;
+  bNode *pbVar6;
+  Camera *camera;
+  int uVar7;
+  unsigned long long in_f31;
+  double dVar8;
+  bVector3 pos;
+  bVector3 vel;
+  bVector3 dir;
+  //LongVector fix_look;
+  bVector3 local_78;
+  bVector3 local_68;
+  bVector3 local_58 [2];
+  char local_8 [8];
+  
+  dVar8 = (double)dT;
+  uVar7 = 0;
+
+  camera = (Camera *)0x0;
+  do {
+    if ((int)camera * 0x68 != 0x7fb9e0a4) {
+      bNode* head = (bNode*)&eViews[(int)camera].CameraMoverList;
+      bNode* first = head->Next;
+    //   if (pbVar6 != (bNode *)((int)camera * 0x68 + -0x7fb9e068)) { 
+    //     pbVar5 = pbVar6;
+    //   }
+      if (first != head) { 
+        
+        CameraMover* mover = (CameraMover*)first; 
+        mover->Update(dT);
+
+      }
+    }
+    camera = (Camera *)((int)&(camera->CurrentKey).Matrix.v0.x + 1);
+  } while ((int)camera < 0x16);
+  if (WeHaveCheckedIfJR2ServerExists == 0) { // who is owner of this variable? Camera class? World?
+    JR2ServerExists = bFunkDoesServerExist("JR2Server");
+    WeHaveCheckedIfJR2ServerExists = 1;
+  }
+  if ((JR2ServerExists != 0) && (eViews[1].pCamera != 0x0)) {
+    iVar2 = RealTime - LastUpdateTimeJR2; // who is owner of the JR?
+    if (iVar2 < 0) {
+      iVar2 = -iVar2;
+    }
+    if (0x10 < iVar2) {
+      LastUpdateTimeJR2 = RealTime;
+      eViews[1].pCamera->CommunicateWithJollyRancher("SpeedCam");
+    }
+  }
+  if (((GManager::Get().mObj == (GManager *)0x0) || (*(int *)&GManager::mObj->mWarping == 0)) && 
+     ((GRaceStatus::fObj == (GRaceStatus *)0x0 ||
+      (*(int *)&GRaceStatus::fObj->mScriptWaitingForLoad == 0)))) {
+    dVar8 = 0.0;
+    bVar1 = false;
+    iVar2 = 1;
+    do {
+      if (eViews[iVar2].Active != '\0') {
+        bNode* firstNode = eViews[iVar2].CameraMoverList.GetHead()->Next;
+        pbVar6 = (bNode *)(iVar2 * 0x68 + -0x7fb9e068);
+        pbVar5 = (bNode *)0x0;
+        if (pbVar3 != pbVar6) {
+          pbVar5 = pbVar3;
+        }
+        if (pbVar5 != (bNode *)0x0) {
+          if (!bVar1) {
+            TheTrackStreamer.ClearStreamingPositions();
+            bVar1 = true;
+          }
+          pCVar4 = eViews[iVar2].pCamera;
+          local_78.x = pCVar4->CurrentKey.Position.x;
+          local_78.y = (pCVar4->CurrentKey).Position.y;
+          local_78.z = (pCVar4->CurrentKey).Position.z;
+          local_68.z = (pCVar4->VelocityKey).Position.z;
+          local_68.x = (pCVar4->VelocityKey).Position.x;
+          local_68.y = (pCVar4->VelocityKey).Position.y;
+          pCVar4 = eViews[iVar2].pCamera;
+          local_58[0].z = (pCVar4->CurrentKey).Direction.z;
+          local_58[0].x = (pCVar4->CurrentKey).Direction.x;
+          local_58[0].y = (pCVar4->CurrentKey).Direction.y;
+          if (bStreamingPositionFromICE != 0) {
+            if (UTL::Collections::Singleton<INIS>::Get() != (INIS *)0x0) {
+              sl = (Vector3 *)((UTL::Collections::Singleton<INIS>::Get()->GetStartCameraLocation()));
+              local_78.x = sl->z;
+              local_78.z = sl->y;
+              local_78.y = -sl->x;
+            }
+            local_68.x = (float)dVar8;
+            local_58[0].z = local_68.z;
+            local_68.y = (float)dVar8;
+            local_58[0].x = (float)dVar8;
+            local_58[0].y = (float)dVar8;
+          }
+          pbVar3 = (bNode*)&eViews[iVar2].CameraMoverList;
+          pbVar5 = (bNode *)0x0;
+          if (pbVar3 != pbVar6) {
+            pbVar5 = pbVar3;
+          }
+          TheTrackStreamer.PredictStreamingPosition(
+            (unsigned int)(iVar2 == 2),
+            &local_78,
+            &local_68,
+            local_58,
+            pbVar5[1].Prev == (bNode *)0x1
+        );
+        }
+      }
+      iVar2 = iVar2 + 1;
+    } while (iVar2 < 3);
+  }
+  return;
+
+}
+
+
+
+
+
+
