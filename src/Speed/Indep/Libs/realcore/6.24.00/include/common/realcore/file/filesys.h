@@ -7,13 +7,23 @@ typedef int FILEOP;
 typedef void FILESYS_CALLBACK(int, int, void *);
 typedef int FILESYS_ATOM(int, void *);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int FILESYS_completeop(FILEOP ophandle);
+
 FILEOP FILESYS_open(const char *name, unsigned int modeflags, int priority, void *userdata);
 FILEOP FILESYS_read(int filehandle, int offset, void *buffer, int bytes, int priority, void *userdata);
-int FILESYS_opensync(const char *name, unsigned int modeflags, int priority);
-bool FILESYS_closesync(int filehandle, int priority);
 int FILESYS_close(int filehandle, int timeout, void *userdata);
+
+#ifdef __cplusplus
+}
+#endif
+
+int FILESYS_opensync(const char *name, unsigned int modeflags, int priority);
 int FILESYS_writesync(int filehandle, int offset, void *buffer, int bytes, int priority);
+bool FILESYS_closesync(int filehandle, int priority);
 int FILESYS_waitop(FILEOP ophandle);
 int FILESYS_size(int filehandle, int priority, void *userdata);
 bool FILESYS_existssync(const char *name, int priority);

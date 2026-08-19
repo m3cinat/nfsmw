@@ -120,7 +120,9 @@ class Camera {
         return &this->CurrentKey.Direction;
     }
 
-    // bVector3 *GetTarget() {}
+    bVector3 *GetTarget() {
+        return &this->CurrentKey.Target;
+    }
 
     // unsigned short GetFov() {}
 
