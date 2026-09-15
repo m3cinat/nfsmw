@@ -32,7 +32,7 @@ class ICEGroup {
     inline unsigned int GetHandle() {
         return Handle;
     }
-    int GetNumTracks() const {
+    int GetNumTracks() {
         return NumTracks;
     }
     ICETrack *GetTrack(int n);
@@ -116,6 +116,8 @@ class ICEManager {
     void Resolve();
 
     int GetCameraIndex(float f_param, struct ICETrack *track);
+
+    ICETrack *ChooseGenericCamera();
 
     ICEData *GetCameraData(uint32 scene_hash, int camTrack);
 

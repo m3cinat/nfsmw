@@ -151,106 +151,10 @@ static void ICEGetPlayerCarTransform(ICE::Matrix4 *mCarToWorld /* r30 */) {
     }
 }
 
-// int ICEManager::ChooseGoodSceneCameraTrackIndex(uint32 scene_hash, const ICE::Matrix4 *scene_origin) {
-//     UMath::Matrix4 mCarToWorld;
-//     int bestTrack = 0;
-
-//     ICEGetPlayerCarTransform(reinterpret_cast<ICE::Matrix4 *>(&mCarToWorld));
-
-//     int numGroups = nNisCameras;
-
-//     for (int i = 0; i < numGroups; ++i) {
-
-//         ICEGroup *group = this->GetNisCameraGroup(scene_hash);
-
-//         if (group->GetHandle() != scene_hash) {
-//             continue;
-//         }
-
-//         int numTracks = group->GetNumTracks();
-//         if (numTracks <= 1) {
-//             break;
-//         }
-
-//         float bestDot = -9999999;
-
-//         for (int k = 0; k < numTracks; ++k) {
-//             ICETrack *track = group->GetTrack(k);
-
-//             /* anonymous block инлайна GetKey */ {
-
-//                 int n = (reinterpret_cast<char *>(track)[1] != 0) ? 1 : 0;
-
-//                 ICEData *key = track->GetKey(n);
-
-//                 UMath::Vector3 v_eye;
-//                 UMath::Vector3 v_look;
-
-//                 key->GetEye(n, reinterpret_cast<ICE::Vector3 *>(&v_eye));
-
-//                 switch (reinterpret_cast<char *>(key)[4]) {
-//                     case 0:
-
-//                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_eye), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-//                                        reinterpret_cast<const ICE::Vector3 *>(&v_eye));
-//                         break;
-//                     case 2:
-
-//                         ICE::Add(&v_eye, &v_eye, reinterpret_cast<const UMath::Vector3 *>(&mCarToWorld.v3));
-//                         break;
-//                     case 3:
-
-//                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_eye), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-//                                        reinterpret_cast<const ICE::Vector3 *>(&v_eye));
-//                         break;
-//                 }
-
-//                 key->GetLook(n, reinterpret_cast<ICE::Vector3 *>(&v_look));
-
-//                 switch (reinterpret_cast<char *>(key)[5]) {
-//                     case 0:
-
-//                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_look), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-//                                        reinterpret_cast<const ICE::Vector3 *>(&v_look));
-//                         break;
-//                     case 2:
-
-//                         ICE::Add(&v_look, &v_look, reinterpret_cast<const UMath::Vector3 *>(&mCarToWorld.v3));
-//                         break;
-//                     case 3:
-
-//                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_look), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-//                                        reinterpret_cast<const ICE::Vector3 *>(&v_look));
-//                         break;
-//                 }
-
-//                 UMath::Vector3 vCamDir;
-
-//                 ICE::Sub(&vCamDir, &v_eye, &v_look);
-
-//                 ICE::Normalize(&vCamDir, &vCamDir);
-
-//                 const UMath::Vector3 *pCarDir = reinterpret_cast<const UMath::Vector3 *>(&mCarToWorld.v2);
-
-//                 float dot = ICE::Dot(&vCamDir, pCarDir);
-
-//                 if (dot > bestDot) {
-//                     bestDot = dot;
-//                     bestTrack = k;
-//                 }
-//             }
-//         }
-//     }
-
-//     return bestTrack;
-// }
-
 int ICEManager::ChooseGoodSceneCameraTrackIndex(uint32 scene_hash, const ICE::Matrix4 *scene_origin) {
-    // Local variables
-    // struct UMath::Matrix4 mCarToWorld; // r1+0x8
-    struct UMath::Matrix4 mCarToWorld; // r1+0x8
+    struct UMath::Matrix4 mCarToWorld;
 
-    int bestTrack = 0; // r19
+    int bestTrack = 0;
 
     mCarToWorld.v0.x = 0.0f;
     mCarToWorld.v1.x = 0.0f;
@@ -274,56 +178,64 @@ int ICEManager::ChooseGoodSceneCameraTrackIndex(uint32 scene_hash, const ICE::Ma
 
     ICEGetPlayerCarTransform(reinterpret_cast<ICE::Matrix4 *>(&mCarToWorld));
 
-    for (int i = 0; i < nNisCameras; i++) {
-
-        struct ICEGroup *group = this->GetNisCameraGroup(scene_hash);
-
-        if (group->GetHandle() != scene_hash) {
-            continue;
+    for (int i = 0; i < nNisCameras; ++i) {
+        ICEGroup *group = nullptr;
+        if (scene_hash == this->pNisCameras[i].GetHandle()) {
+            group = &this->pNisCameras[i];
         }
 
-        int numTracks = group->GetNumTracks(); // r25
-        float bestDot;                         // f30 // mb 0.0f or -1.0f
+        int numTracks = group->GetNumTracks();
+        if (numTracks < 2) {
+            return bestTrack;
+        }
+        float bestDot = -1.0f;
 
         for (int k = 0; k < numTracks; k++) {
 
             ICETrack *track = group->GetTrack(k);
 
             if (track->GetNumKeys() > 0) {
-                struct ICEData *key = track->GetKey(0);
-                int n; // r29
 
-                struct UMath::Vector3 v_eye; // r1+0x48
+                struct ICEData *key = track->GetKey(0);
+                int n = key->bSmooth ? 1 : 0;
+
+                struct UMath::Vector3 v_eye;
                 key->GetEye(n, reinterpret_cast<ICE::Vector3 *>(&v_eye));
 
                 switch (key->nSpaceEye) {
                     case 0:
                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_eye), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
                                        reinterpret_cast<const ICE::Vector3 *>(&v_eye));
+                        break;
 
                     case 2:
                         ICE::Add(&v_eye, &v_eye, reinterpret_cast<const UMath::Vector3 *>(&mCarToWorld.v3));
+                        break;
 
                     case 3:
-                        ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_eye), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-                                       reinterpret_cast<const ICE::Vector3 *>(&v_eye));
+                        ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_eye), scene_origin, reinterpret_cast<const ICE::Vector3 *>(&v_eye));
+                        break;
                 }
-                struct UMath::Vector3 v_look; // r1+0x58
+                struct UMath::Vector3 v_look;
+                key->GetLook(n, reinterpret_cast<ICE::Vector3 *>(&v_look));
                 switch (key->nSpaceLook) {
                     case 0:
 
                         ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_look), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
+
                                        reinterpret_cast<const ICE::Vector3 *>(&v_look));
+                        break;
 
                     case 2:
                         ICE::Add(&v_look, &v_look, reinterpret_cast<const UMath::Vector3 *>(&mCarToWorld.v3));
+                        break;
 
                     case 3:
-                        ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_look), reinterpret_cast<const ICE::Matrix4 *>(&mCarToWorld),
-                                       reinterpret_cast<const ICE::Vector3 *>(&v_look));
+                        ICE::MulVector(reinterpret_cast<ICE::Vector3 *>(&v_look), scene_origin, reinterpret_cast<const ICE::Vector3 *>(&v_look));
+                        break;
                 }
 
-                UMath::Vector3 vCamDir; // r1+0x68
+                UMath::Vector3 vCamDir;
 
                 ICE::Sub(&vCamDir, &v_eye, &v_look);
                 // vCamDir.pad = 0.0f;
@@ -339,6 +251,8 @@ int ICEManager::ChooseGoodSceneCameraTrackIndex(uint32 scene_hash, const ICE::Ma
             }
         }
     }
+
+    return bestTrack;
 }
 
 void ICEManager::SetGenericCameraToPlay(char const *group_name, char const *track_name)
@@ -350,6 +264,8 @@ void ICEManager::SetGenericCameraToPlay(char const *group_name, char const *trac
     return;
 }
 
+ICETrack *ICEManager::ICEManager::ChooseGenericCamera() {}
+
 ICEGroup *ICEManager::GetNisCameraGroup(uint32 scene_hash) {
     for (int i = 0; i < nNisCameras; ++i) {
         if (scene_hash == pNisCameras[i].GetHandle())
@@ -358,7 +274,6 @@ ICEGroup *ICEManager::GetNisCameraGroup(uint32 scene_hash) {
 
     return nullptr;
 }
-
 int ICEManager::GetNumSceneCameraTrack(uint32 scene_hash) {
     ICEGroup *group = this->GetNisCameraGroup(scene_hash);
 
